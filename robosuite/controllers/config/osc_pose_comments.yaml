@@ -1,0 +1,34 @@
+# ! 原文件为 xml 文件，但由于 xml 文件不太好注释，更改为 yaml 文件，使用 yaml 文件注释
+
+{
+    # 基本控制参数
+    "type": "OSC_POSE", # 控制器类型：操作空间位姿控制（同时控制位置和姿态）
+
+    "input_max": 1, # 输入最大值：控制器接收的动作输入的最大值（归一化范围）
+    "input_min": -1, # 输入最小值：控制器接收的动作输入的最小值（归一化范围）
+
+    #   [x_max, y_max, z_max, roll_max, pitch_max, yaw_max] (单位：米, 弧度)
+    "output_max": [0.05, 0.05, 0.05, 0.5, 0.5, 0.5], # 输出的最大变化量限制，前三个值：最大笛卡尔位置移动速度（m/s），后三个值：最大角速度（rad/s）
+    "output_min": [-0.05, -0.05, -0.05, -0.5, -0.5, -0.5], # 输出的最小变化量限制（负值表示反向运动）
+
+    # 控制器增益参数
+    "kp": 150, # 位置增益：控制器响应误差的强度，数值越大响应越快但可能导致振荡
+    "damping_ratio": 1, # 阻尼比：控制系统的阻尼特性，1表示临界阻尼（无超调），<1欠阻尼（有振荡），>1过阻尼（响应慢），影响运动的平滑性和稳定性
+    "impedance_mode": "fixed", # 阻抗模式：比例增益的可调整范围, 允许在线调节 kp 值的边界，可选项有 fixed(固定增益), variable(可变增益), variable_kp(仅kp可变)
+    
+    # 可变阻抗模式的限制范围（仅在impedance_mode为variable或variable_kp时有效）
+    "kp_limits": [0, 300], # kp的允许范围：[最小值, 最大值]
+    "damping_ratio_limits": [0, 10], # 阻尼比的允许范围：[最小值, 最大值]
+
+    # 位置和姿态限制
+    "position_limits": null, # 位置限制：[min_pos, max_pos]，null表示无限制
+    "orientation_limits": null, # 姿态限制：[min_ori, max_ori]，null表示无限制
+
+    # 控制策略参数
+    "uncouple_pos_ori": true, # 解耦位置和姿态控制：true表示位置和姿态独立控制，false表示耦合
+    "control_delta": true, # 增量控制：true表示控制增量（相对当前位置），false表示控制绝对位置
+
+    # 插值参数
+    "interpolation": null, # 插值方式，null 表示不使用插值，"linear"表示线性插值
+    "ramp_ratio": 0.2, # 斜坡比例：用于平滑动作过渡，值越小过渡越平缓。控制器开始时逐渐增加输出，避免突然的大动作
+}
