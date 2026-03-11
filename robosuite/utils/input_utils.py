@@ -27,7 +27,7 @@ def choose_environment():
     for k, env in enumerate(envs):
         print("[{}] {}".format(k, env))
     # 打印环境选项供用户查看
-    print()  
+    print()
     #     [0] Door
     #     [1] Lift
     #     [2] NutAssembly
@@ -203,49 +203,70 @@ def input2action(device, robot, active_arm="right", env_configuration=None):
 
     Args:
         device (Device): A device from which user inputs can be converted into actions. Can be either a Spacemouse or
-            Keyboard device class
+            Keyboard device class. -- 可以从中将用户输入转换为动作的设备。可以是 Spacemouse 或 Keyboard 设备类
 
-        robot (Robot): Which robot we're controlling
+        robot (Robot): Which robot we're controlling. --  我们正在控制哪个机器人
 
         active_arm (str): Only applicable for multi-armed setups (e.g.: multi-arm environments or bimanual robots).
             Allows inputs to be converted correctly if the control type (e.g.: IK) is dependent on arm choice.
             Choices are {right, left}
+            仅适用于[多臂]设置(例如：多臂环境或双手机器人)。如果控制类型 (例如: IK) 依赖于臂的选择，则允许正确转换输入。选项为{right, left}
 
         env_configuration (str or None): Only applicable for multi-armed environments. Allows inputs to be converted
             correctly if the control type (e.g.: IK) is dependent on the environment setup. Options are:
             {bimanual, single-arm-parallel, single-arm-opposed}
+            仅适用于多臂环境。如果控制类型 (例如: IK) 依赖于环境设置，则允许正确转换输入。选项为：{bimanual, single-arm-parallel, single-arm-opposed}
 
     Returns:
         2-tuple:
 
             - (None or np.array): Action interpreted from @device including any gripper action(s). None if we get a
-                reset signal from the device
+                reset signal from the device. -- 从 @device 解释的动作，包括任何夹爪动作。如果从设备获得重置信号则为 None。
             - (None or int): 1 if desired close, -1 if desired open gripper state. None if get a reset signal from the
-                device
+                device. -- 1 表示期望关闭，-1 表示期望打开夹爪状态。如果从设备获得重置信号则为 None。
 
     """
+    # 从设备获取控制器状态字典
     state = device.get_controller_state()
+
     # Note: Devices output rotation with x and z flipped to account for robots starting with gripper facing down
     #       Also note that the outputted rotation is an absolute rotation, while outputted dpos is delta pos
     #       Raw delta rotations from neutral user input is captured in raw_drotation (roll, pitch, yaw)
+
+    # Note: 设备输出旋转时 x 和 z 翻转，以考虑机器人起始时夹爪朝下的情况
+    #       还要注意，输出的旋转是绝对旋转，而输出的dpos是增量位置
+    #       中性用户输入的原始增量旋转保存在raw_drotation中(滚动、俯仰、偏航)
+
+    # 从状态字典中提取各项值
+    # dpos: 位移向量，shape (3,)，类型 np.array
+    # rotation: 绝对旋转，类型 np.array
+    # raw_drotation: 原始增量旋转，shape (3,)，类型 np.array
+    # grasp: 夹爪状态，布尔值，类型 bool
+    # reset: 重置信号，布尔值，类型 bool
     dpos, rotation, raw_drotation, grasp, reset = (
-        state["dpos"],
-        state["rotation"],
-        state["raw_drotation"],
-        state["grasp"],
-        state["reset"],
+        state["dpos"],  # 位移变化，np.array (3,)
+        state["rotation"],  # 旋转，np.array
+        state["raw_drotation"],  # 原始增量旋转，np.array (3,)
+        state["grasp"],  # 夹爪操作，bool
+        state["reset"],  # 重置信号，bool
     )
 
-    # If we're resetting, immediately return None
+    # 如果需要重置，立即返回 None
     if reset:
         return None, None
 
-    # Get controller reference
+    # 获取控制器引用
+    # 如果不是双臂机器人，则使用 robot.controller；如果是双臂机器人，则使用 robot.controller[active_arm]
     controller = robot.controller if not isinstance(robot, Bimanual) else robot.controller[active_arm]
+    # 获取夹爪自由度
+    # 如果不是双臂机器人，则使用 robot.gripper.dof；如果是双臂机器人，则使用 robot.gripper[active_arm].dof
     gripper_dof = robot.gripper.dof if not isinstance(robot, Bimanual) else robot.gripper[active_arm].dof
 
-    # First process the raw drotation
+    # 首先处理原始 drotation
+    # 重新排列轴的顺序，从 [0,1,2] 变为 [1,0,2]，即交换 x 和 y 轴
     drotation = raw_drotation[[1, 0, 2]]
+
+    # case1 如果控制器是 IK_POSE 类型
     if controller.name == "IK_POSE":
         # If this is panda, want to swap x and y axis
         if isinstance(robot.robot_model, Panda):
@@ -276,26 +297,38 @@ def input2action(device, robot, active_arm="right", env_configuration=None):
         # Lastly, map to axis angle form
         drotation = T.quat2axisangle(drotation)
 
+    # case2 如果控制器是 OSC_POSE 类型
     elif controller.name == "OSC_POSE":
         # Flip z
         drotation[2] = -drotation[2]
         # Scale rotation for teleoperation (tuned for OSC) -- gains tuned for each device
         drotation = drotation * 1.5 if isinstance(device, Keyboard) else drotation * 50
         dpos = dpos * 75 if isinstance(device, Keyboard) else dpos * 125
+
+    # case3 如果控制器是 OSC_POSITION 类型
     elif controller.name == "OSC_POSITION":
         dpos = dpos * 75 if isinstance(device, Keyboard) else dpos * 125
+
+    # case4 其他控制器类型不支持
     else:
         # No other controllers currently supported
         print("Error: Unsupported controller specified -- Robot must have either an IK or OSC-based controller!")
 
+    # 将 0 映射到 -1(打开) 并将 1 映射到 1(关闭)
     # map 0 to -1 (open) and map 1 to 1 (closed)
     grasp = 1 if grasp else -1
 
-    # Create action based on action space of individual robot
+    # 基于单个机器人的动作空间，创建动作
     if controller.name == "OSC_POSITION":
+        # 对于只有位置控制的 OSC，动作只包含位置和夹爪
+        # np.concatenate([dpos, [grasp] * gripper_dof])，其中dpos是(3,)，[grasp]*gripper_dof是(gripper_dof,)
+        # 所以 action 形状为(3+gripper_dof,)
         action = np.concatenate([dpos, [grasp] * gripper_dof])
     else:
+        # 对于其他控制器，动作包含位置、旋转和夹爪
+        # np.concatenate([dpos, drotation, [grasp] * gripper_dof])，其中dpos是(3,)，drotation是(3,)，[grasp]*gripper_dof是(gripper_dof,)
+        # 所以 action 形状为(3+3+gripper_dof,) = (6+gripper_dof,)
         action = np.concatenate([dpos, drotation, [grasp] * gripper_dof])
 
     # Return the action and grasp
-    return action, grasp
+    return action, grasp  # shape = (np.array, int)
