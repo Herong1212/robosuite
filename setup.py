@@ -18,7 +18,8 @@ setup(
         "numpy>=1.13.3",
         "numba>=0.49.1",
         "scipy>=1.2.3",
-        "mujoco>=2.3.0",
+        # "mujoco>=2.3.0", # 可能会出现错误：AttributeError: 'MjModel' object has no attribute 'tex_rgb'
+        "mujoco==3.1.1",  # ! v1.5.2 文档中明确指出兼容"3.1.1"版本！太新的版本不兼容
         "Pillow",
         "opencv-python",
     ],
