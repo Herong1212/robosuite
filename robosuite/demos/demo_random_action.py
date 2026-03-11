@@ -44,7 +44,7 @@ if __name__ == "__main__":
     #  ] [   OOO      /o|__|
 
     # step2 选择仿真环境, 并将其添加到 options 字典中
-    options["env_name"] = choose_environment()  # "Lift" (键盘输入为 1)
+    options["env_name"] = choose_environment()  # ps [1] Lift (键盘输入为 1)
 
     # case1 If a multi-arm environment has been chosen, choose configuration and appropriate robot(s)
     if "TwoArm" in options["env_name"]:
@@ -71,10 +71,10 @@ if __name__ == "__main__":
     # case2 Else, we simply choose a single (single-armed) robot to instantiate in the environment
     else:
         # 选择单臂机器人, 包括 robots = {"Sawyer", "Panda", "Jaco", "Kinova3", "IIWA", "UR5e"}
-        options["robots"] = choose_robots(exclude_bimanual=True)  # "UR5e"
+        options["robots"] = choose_robots(exclude_bimanual=True)  # ps [5] UR5e（键盘输入为 5）
 
     # step3 选择控制器类型
-    controller_name = choose_controller()  # OSC_POSE
+    controller_name = choose_controller()  # ps [4] OSC_POSE（键盘输入为 4）
 
     # Load the desired controller，加载所选控制器的配置参数
     options["controller_configs"] = load_controller_config(default_controller=controller_name)
@@ -119,17 +119,17 @@ if __name__ == "__main__":
     pp.pprint(env)  # <robosuite.environments.manipulation.lift.Lift object at 0x7ff880557730>
 
     # 打印环境的所有属性和方法
-    # print("# env 所有属性和方法:")
-    # for attr in dir(env):
-    #     if not attr.startswith("_"):  # 过滤掉私有属性
-    #         try:
-    #             value = getattr(env, attr)
-    #             if callable(value):
-    #                 print(f"  {attr}: <method>")
-    #             else:
-    #                 print(f"  {attr}: {type(value).__name__} = {value}")
-    #         except:
-    #             print(f"  {attr}: <无法访问>")
+    print("# env 所有属性和方法:")
+    for attr in dir(env):
+        if not attr.startswith("_"):  # 过滤掉私有属性
+            try:
+                value = getattr(env, attr)
+                if callable(value):
+                    print(f"  {attr}: <method>")
+                else:
+                    print(f"  {attr}: {type(value).__name__} = {value}")
+            except:
+                print(f"  {attr}: <无法访问>")
 
     # step5 重置环境
     env.reset()  # 重置环境到初始状态
@@ -144,13 +144,15 @@ if __name__ == "__main__":
     # step6 做可视化
     for i in range(30000):
         # 采取随机动作，并进行归一化
-        action = np.random.uniform(low, high)  # 生成在动作空间限制范围内的随机动作向量
+        action = np.random.uniform(low, high)  # 生成在动作空间限制范围内的随机动作向量，是归一化 [-1, 1] 后的值
+        # action_spec: tuple = (array([-1., -1., -1., -1., -1., -1., -1.]), array([1., 1., 1., 1., 1., 1., 1.]))
 
-        # NOTE 这是最重要的！
-        obs, reward, done, _ = env.step(action)  # 执行随机动作并获取环境反馈：观测值、奖励、完成标志和其他信息
+        # NOTE 这是最重要的！注意：输入的 action 是归一化后的，而输出是真实值
+        # 执行随机动作并获取环境反馈：观测值（真实值）、奖励、完成标志和其他信息。
+        obs, reward, done, _ = env.step(action)
 
-        # print("# obs.keys: ")
-        # pp.pprint(obs.keys())
+        print("# obs.keys: ")
+        pp.pprint(obs.keys())
         # odict_keys(
         #     [
         #         # ? 为什么不直接给角度？ 在深度学习中，角度在 2pi 和 0 之间会有跳变，使用三角函数表示可以保证数值的连续性，更有利于神经网络训练。
@@ -187,7 +189,7 @@ if __name__ == "__main__":
         # 当这个向量的数值接近于 0 时，说明夹爪已经碰到了方块。
         # pp.pprint(obs["gripper_to_cube_pos"])
 
-        dist = np.linalg.norm(obs["gripper_to_cube_pos"])  # 计算欧几里得距离
+        dist = np.linalg.norm(obs["gripper_to_cube_pos"])  # 计算欧几里得距离，仅在 [1] Lift 环境中使用
         print(f"距离方块还有: {dist:.4f} 米")
 
         if dist < 0.02:
